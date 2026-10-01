@@ -1,11 +1,17 @@
-package org.example;
+package bot;
 
 import org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+
 public class Main {
+
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) throws TelegramApiException {
 
@@ -13,10 +19,10 @@ public class Main {
 
         try {
             Connection connection = db_connection.getConnection();
-            System.out.println("БД подключена!");
+            log.info("db started");
             connection.close();
         } catch (SQLException e) {
-            e.printStackTrace();
+            log.error("db not started", e);
         }
 
         TelegramBotsLongPollingApplication botsApplication =
@@ -24,7 +30,7 @@ public class Main {
 
         botsApplication.registerBot(token, new CineMateBot(token));
 
-        System.out.println("Бот запущен!");
+        log.info("bot started");
 
 
     }
