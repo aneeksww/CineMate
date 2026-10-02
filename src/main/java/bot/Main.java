@@ -1,5 +1,6 @@
 package bot;
 
+import database.db_connection;
 import org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.sql.Connection;
@@ -7,6 +8,10 @@ import java.sql.SQLException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import service.movieService;
+import service.collectionService;
+import service.reviewService;
 
 
 public class Main {
@@ -20,7 +25,6 @@ public class Main {
         try {
             Connection connection = db_connection.getConnection();
             log.info("db started");
-            connection.close();
         } catch (SQLException e) {
             log.error("db not started", e);
         }
@@ -28,8 +32,13 @@ public class Main {
         TelegramBotsLongPollingApplication botsApplication =
                 new TelegramBotsLongPollingApplication();
 
-        botsApplication.registerBot(token, new CineMateBot(token));
+        movieService movieService = new movieService();
+        collectionService collectionService = new collectionService();
+        reviewService reviewService = new reviewService();
 
+        CineMateBot bot = new CineMateBot(token, movieService, collectionService, reviewService);
+
+        botsApplication.registerBot(token, bot);
         log.info("bot started");
 
 

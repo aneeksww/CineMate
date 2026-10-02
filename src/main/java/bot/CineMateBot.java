@@ -12,78 +12,118 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-
+import data.UserData;
+import service.collectionService;
+import service.movieService;
+import service.reviewService;
 
 public class CineMateBot implements LongPollingUpdateConsumer {
 
     private final TelegramClient telegramClient;
     private final UserData UserData;
+    private final movieService movieService;
+    private final collectionService collectionService;
+    private final reviewService reviewService;
 
-    public CineMateBot(String token) {
+    private final Map<Long, String> userStates = new HashMap<>();  // userId → "AWAITING_TITLE" / "AWAITING_GENRE"
+    private final Map<Long, String> tempTitles = new HashMap<>();  // userId → введённое название
+
+    public CineMateBot(String token,
+                       movieService movieService,
+                       collectionService collectionService,
+                       reviewService reviewService) {
         telegramClient = new OkHttpTelegramClient(token);
         UserData = new UserData();
+        this.movieService = movieService;
+        this.collectionService = collectionService;
+        this.reviewService = reviewService;
     }
 
     @Override
     public void consume(List<Update> updates) {
         for (Update update : updates) {
 
+
             if (update.hasCallbackQuery()) {
 
                 String data = update.getCallbackQuery().getData();
                 long ChatID = update.getCallbackQuery().getMessage().getChatId();
+                long userIdLong = update.getCallbackQuery().getFrom().getId();
 
                 if (data.equals("main_menu")) {
+                    userStates.remove(userIdLong);
+                    tempTitles.remove(userIdLong);
 
                     EditMessageText message = EditMessageText.builder()
                             .chatId(ChatID)
                             .messageId(update.getCallbackQuery().getMessage().getMessageId())
-                            .text("ляляля я семен лобанов выбирай")
+                            .text("Выбирай:")
                             .replyMarkup(mainMenu())
                             .build();
-
                     try {
                         telegramClient.execute(message);
                     } catch (TelegramApiException e) {
                         e.printStackTrace();
                     }
-
                     return;
                 }
 
-                String answer = switch(data) {
-                    case "add_movie" ->
-                        "типа идет добавление фильма";
-                    case "my_movies" ->
-                        "типа подборка введенных фильмов";
-                    case "random_mine" ->
-                        "типа жесткий рандом из подборки";
-                    case "local_movies" ->
-                        "типа встроенная база";
-                    case "random_local" ->
-                        "типа жесткий рандом из базы";
-                    case "my_reviews" ->
-                        "типа наши отзывы";
-                    default ->
-                        "куда ты нажал";
+                String answer = switch (data) {
+
+                    case "add_movie" -> {
+                        userStates.put(userIdLong, "AWAITING_TITLE");
+                        yield "Введите название фильма:";
+                    }
+
+                    case "genre_1", "genre_2", "genre_3", "genre_4",
+                         "genre_5", "genre_6", "genre_7", "genre_8",
+                         "genre_9", "genre_10" -> {
+                        int genreId = Integer.parseInt(data.substring("genre_".length()));
+                        String title = tempTitles.get(userIdLong);
+
+                        if (title == null) {
+                            yield "Сначала введите название фильма.";
+                        }
+
+                        String result = movieService.addMovie(userIdLong, title, genreId);
+
+                        userStates.remove(userIdLong);
+                        tempTitles.remove(userIdLong);
+
+                        yield result;
+                    }
+
+                    case "my_movies"    -> collectionService.getUserMovies(userIdLong);
+                    case "random_mine"  -> collectionService.getRandomFromUser(userIdLong);
+                    case "local_movies" -> movieService.getBaseMovies();
+                    case "random_local" -> movieService.getRandomFromBase();
+                    case "my_reviews"   -> reviewService.getUserReviews(userIdLong);
+                    default             -> "Неизвестная команда";
                 };
 
-                InlineKeyboardMarkup backKeyboard = InlineKeyboardMarkup.builder()
-                        .keyboardRow(new InlineKeyboardRow(
-                                InlineKeyboardButton.builder()
-                                        .text("⬅ Главное меню")
-                                        .callbackData("main_menu")
-                                        .build()
-                        ))
-                        .build();
+                InlineKeyboardMarkup keyboard;
+                if ("AWAITING_GENRE".equals(userStates.get(userIdLong))) {
+                    keyboard = genreKeyboard();
+                } else {
+                    keyboard = InlineKeyboardMarkup.builder()
+                            .keyboardRow(new InlineKeyboardRow(
+                                    InlineKeyboardButton.builder()
+                                            .text("⬅ Главное меню")
+                                            .callbackData("main_menu")
+                                            .build()
+                            ))
+                            .build();
+                }
 
                 EditMessageText message = EditMessageText.builder()
                         .chatId(ChatID)
                         .messageId(update.getCallbackQuery().getMessage().getMessageId())
                         .text(answer)
-                        .replyMarkup(backKeyboard)
+                        .replyMarkup(keyboard)
                         .build();
 
                 try {
@@ -91,24 +131,38 @@ public class CineMateBot implements LongPollingUpdateConsumer {
                 } catch (TelegramApiException e) {
                     e.printStackTrace();
                 }
-
                 return;
-
             }
+
 
             if (update.hasMessage() && update.getMessage().hasText()) {
 
                 String text = update.getMessage().getText();
                 long chatId = update.getMessage().getChatId();
+                long userIdLong = update.getMessage().getFrom().getId();
 
+                // ─── FSM: если ждём название фильма ───
+                if ("AWAITING_TITLE".equals(userStates.get(userIdLong))) {
+                    tempTitles.put(userIdLong, text);
+                    userStates.put(userIdLong, "AWAITING_GENRE");
 
+                    SendMessage msg = SendMessage.builder()
+                            .chatId(chatId)
+                            .text("Выберите жанр для фильма «" + text + "»:")
+                            .replyMarkup(genreKeyboard())
+                            .build();
+                    try {
+                        telegramClient.execute(msg);
+                    } catch (TelegramApiException e) {
+                        e.printStackTrace();
+                    }
+                    return;
+                }
 
                 if (text.equals("/start")) {
-
-
                     SendMessage message = SendMessage.builder()
                             .chatId(chatId)
-                            .text("ляляля я семен лобанов выбирай")
+                            .text("Привет! Выбирай действие:")
                             .replyMarkup(mainMenu())
                             .build();
 
@@ -130,8 +184,8 @@ public class CineMateBot implements LongPollingUpdateConsumer {
             }
         }
     }
-    private InlineKeyboardMarkup mainMenu() {
 
+    private InlineKeyboardMarkup mainMenu() {
         return InlineKeyboardMarkup.builder()
                 .keyboardRow(new InlineKeyboardRow(
                         InlineKeyboardButton.builder()
@@ -144,7 +198,6 @@ public class CineMateBot implements LongPollingUpdateConsumer {
                                 .text("Моя подборка")
                                 .callbackData("my_movies")
                                 .build(),
-
                         InlineKeyboardButton.builder()
                                 .text("Случайный из подборки")
                                 .callbackData("random_mine")
@@ -155,7 +208,6 @@ public class CineMateBot implements LongPollingUpdateConsumer {
                                 .text("База фильмов")
                                 .callbackData("local_movies")
                                 .build(),
-
                         InlineKeyboardButton.builder()
                                 .text("Случайный из базы")
                                 .callbackData("random_local")
@@ -166,6 +218,27 @@ public class CineMateBot implements LongPollingUpdateConsumer {
                                 .text("Мои отзывы")
                                 .callbackData("my_reviews")
                                 .build()
+                ))
+                .build();
+    }
+
+    private InlineKeyboardMarkup genreKeyboard() {
+        return InlineKeyboardMarkup.builder()
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Боевик").callbackData("genre_1").build(),
+                        InlineKeyboardButton.builder().text("Комедия").callbackData("genre_2").build()
+                ))
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Драма").callbackData("genre_3").build(),
+                        InlineKeyboardButton.builder().text("Фантастика").callbackData("genre_4").build()
+                ))
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Ужасы").callbackData("genre_5").build(),
+                        InlineKeyboardButton.builder().text("Триллер").callbackData("genre_6").build()
+                ))
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Мелодрама").callbackData("genre_7").build(),
+                        InlineKeyboardButton.builder().text("Детектив").callbackData("genre_8").build()
                 ))
                 .build();
     }
