@@ -86,12 +86,12 @@ public class movieService {
         return "Случайный из базы:\n" + m.getTitle() + " (" + m.getGenre() + ")";
     }
 
-    // ─── Добавление фильма в подборку пользователя ───
+    // Добавление фильма в подборку пользователя
     public String addMovie(long userId, String title, int genreId) {
         try {
             int movieId;
 
-            // 1. Вставить фильм (is_base = 0, потому что пользовательский)
+            // Вставить фильм
             String sql1 = "INSERT INTO movies (title, is_base) VALUES (?, 0)";
             try (Connection conn = db_connection.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(
@@ -104,7 +104,7 @@ public class movieService {
                 }
             }
 
-            // 2. Связать с жанром
+            // жанр
             String sql2 = "INSERT OR IGNORE INTO movie_genres (movie_id, genre_id) VALUES (?, ?)";
             try (Connection conn = db_connection.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql2)) {
@@ -113,7 +113,7 @@ public class movieService {
                 stmt.executeUpdate();
             }
 
-            // 3. Добавить в подборку пользователя
+            // подборка пользователя
             String sql3 = "INSERT OR IGNORE INTO user_movies (tg_id, movie_id) VALUES (?, ?)";
             try (Connection conn = db_connection.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql3)) {

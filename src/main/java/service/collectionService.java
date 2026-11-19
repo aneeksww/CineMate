@@ -10,7 +10,7 @@ import java.util.Random;
 
 public class collectionService {
 
-    // 1. Получить список фильмов пользователя (для вывода текстом)
+    //список фильмов пользователя
     public String getUserMovies(long userId) {
         String sql = "SELECT m.id, m.title, " +
                 "(SELECT g.name FROM movie_genres mg " +
@@ -52,7 +52,7 @@ public class collectionService {
         return sb.toString();
     }
 
-    // 2. Получить случайный фильм из подборки
+    // случайгый фильм из подборки
     public String getRandomFromUser(long userId) {
         String sql = "SELECT m.id, m.title, " +
                 "(SELECT g.name FROM movie_genres mg " +
@@ -90,7 +90,7 @@ public class collectionService {
         return "Случайный из твоей подборки:\n" + m.getTitle() + " (" + m.getGenre() + ")";
     }
 
-    // 3. Удаление фильма из подборки
+    // удаление фильма из подборки
     public String deleteFromUserCollection(long userId, int movieId) {
         String sql = "DELETE FROM user_movies WHERE tg_id = ? AND movie_id = ?";
         try (Connection connection = db_connection.getConnection();
@@ -109,7 +109,7 @@ public class collectionService {
         }
     }
 
-    // 4. Получить список фильмов в виде List (для генерации кнопок удаления)
+    // получение списка фильмов
     public List<movie> getUserMoviesList(long userId) {
         String sql = "SELECT m.id, m.title, " +
                 "(SELECT g.name FROM movie_genres mg " +
